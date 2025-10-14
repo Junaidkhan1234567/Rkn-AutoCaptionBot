@@ -20,7 +20,7 @@ class Rkn_Botz(object):
     # Rkn client config (required)
     API_ID = os.environ.get("API_ID", "22107616")
     API_HASH = os.environ.get("API_HASH", "6629084d27f421f2375a57f233e471e2")
-    BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+    BOT_TOKEN = os.environ.get("BOT_TOKEN", "6334035979:AAFiBFj7SdXlGRejubaPW6Z9107-Xu1fxSY")
 
     # Start pic (default image link)
     RKN_PIC = os.environ.get("RKN_PIC", "https://telegra.ph/file/21a8e96b45cd6ac4d3da6.jpg")
@@ -66,5 +66,6 @@ class Rkn_Botz(object):
 
 
 # ⚠️ Please do not remove this credit!
+
 
 
