@@ -12,7 +12,7 @@
 
 # ⚠️ Please do not remove this credit!
 
-
+from Rkn_Botz.Config import Config
 from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from pyrogram.errors import UserNotParticipant
