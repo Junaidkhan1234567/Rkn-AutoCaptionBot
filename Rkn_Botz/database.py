@@ -76,6 +76,69 @@ class Database:
             upsert=False
         )
         return result.modified_count > 0
+
+    # ✅ Watermark Functions Added
+    async def set_channel_watermark(self, channel_id: int, watermark_text: str, 
+                                    watermark_position: str = "bottom_right",
+                                    watermark_size: int = 20,
+                                    watermark_color: str = "white"):
+        """
+        Set watermark settings for a channel
+        """
+        try:
+            doc = {
+                "channelId": channel_id,
+                "watermark_text": watermark_text,
+                "watermark_position": watermark_position,
+                "watermark_size": watermark_size,
+                "watermark_color": watermark_color
+            }
+            await self._channels_collection.update_one(
+                {"channelId": channel_id},
+                {"$set": doc},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            print(f"Error setting watermark: {e}")
+            return False
+
+    async def get_channel_watermark(self, channel_id: int):
+        """
+        Get watermark settings for a channel
+        """
+        try:
+            result = await self._channels_collection.find_one({"channelId": channel_id})
+            if result and result.get("watermark_text"):
+                return {
+                    "text": result.get("watermark_text"),
+                    "position": result.get("watermark_position", "bottom_right"),
+                    "size": result.get("watermark_size", 20),
+                    "color": result.get("watermark_color", "white")
+                }
+            return None
+        except Exception as e:
+            print(f"Error getting watermark: {e}")
+            return None
+
+    async def delete_channel_watermark(self, channel_id: int):
+        """
+        Delete watermark settings for a channel
+        """
+        try:
+            result = await self._channels_collection.update_one(
+                {"channelId": channel_id},
+                {"$unset": {
+                    "watermark_text": "",
+                    "watermark_position": "",
+                    "watermark_size": "",
+                    "watermark_color": ""
+                }}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"Error deleting watermark: {e}")
+            return False
         
 rkn_botz = Database()
 
