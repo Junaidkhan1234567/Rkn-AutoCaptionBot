@@ -15,7 +15,8 @@
 from pyrogram import Client, filters, errors, types
 from config import Rkn_Botz
 from .database import rkn_botz
-import asyncio, time, re, os, sys
+import asyncio, time, re, os, sys, tempfile
+from .watermark import add_watermark_to_image
 
 @Client.on_message(filters.private & filters.user(Rkn_Botz.ADMIN) & filters.command("rknusers"))
 async def show_user_stats(client, message):
@@ -108,7 +109,9 @@ async def start_cmd(client, message):
             f"I'm an Auto Caption Bot.\n"
             f"I auto-edit captions for videos, audio, documents posted in channels.\n\n"
             f"/set_caption – Set your custom caption\n"
-            f"/delcaption – Delete and use default caption\n\n"
+            f"/delcaption – Delete and use default caption\n"
+            f"/set_watermark – Set watermark for images\n"
+            f"/del_watermark – Delete watermark\n\n"
             f"Note: Commands only work in channels where I'm admin.</b>"
         ),
         reply_markup=types.InlineKeyboardMarkup([
@@ -203,7 +206,7 @@ async def auto_caption(client, message):
         media = getattr(message, mtype, None)
         if media and hasattr(media, "file_name"):
             file_name = re.sub(r"@\w+", "", media.file_name or "").replace("_", " ").replace(".", " ").strip()
-            file_size = getattr(media, "file_size", None)  # ✅ file_size added here
+            file_size = getattr(media, "file_size", None)
             break
     else:
         return
@@ -222,8 +225,8 @@ async def auto_caption(client, message):
                 episode=detect_episode(original_caption),
                 season=detect_season(original_caption),
                 year=detect_year(original_caption),
-                quelty=detect_quality(original_caption)
-                file_size=convert_size(file_size) if file_size else "Unknown"  # ✅ Fixed
+                quelty=detect_quality(original_caption),
+                file_size=convert_size(file_size) if file_size else "Unknown"
             )
         else:
             formatted = Rkn_Botz.DEFAULT_CAPTION.format(
@@ -233,11 +236,76 @@ async def auto_caption(client, message):
                 episode=detect_episode(original_caption),
                 season=detect_season(original_caption),
                 year=detect_year(original_caption),
-                file_size=convert_size(file_size) if file_size else "Unknown"  # ✅ Fixed
+                quelty=detect_quality(original_caption),
+                file_size=convert_size(file_size) if file_size else "Unknown"
             )
+        
+        # ✅ Check for watermark
+        watermark_config = await rkn_botz.get_channel_watermark(channel_id)
+        
+        # ✅ Apply watermark for photos and videos
+        if watermark_config and watermark_config.get('text'):
+            if message.photo or (message.video and message.video.thumbs):
+                try:
+                    # Download media
+                    file_path = await client.download_media(message)
+                    
+                    if file_path:
+                        # Read file
+                        with open(file_path, 'rb') as f:
+                            file_data = f.read()
+                        
+                        # Add watermark
+                        watermarked_data = await add_watermark_to_image(file_data, watermark_config)
+                        
+                        if watermarked_data:
+                            # Save watermarked file
+                            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+                            temp_file.write(watermarked_data)
+                            temp_file.close()
+                            
+                            # Send watermarked file
+                            if message.photo:
+                                await client.send_photo(
+                                    chat_id=message.chat.id,
+                                    photo=temp_file.name,
+                                    caption=formatted,
+                                    reply_to_message_id=message.id
+                                )
+                            elif message.video:
+                                await client.send_video(
+                                    chat_id=message.chat.id,
+                                    video=temp_file.name,
+                                    caption=formatted,
+                                    reply_to_message_id=message.id,
+                                    supports_streaming=True
+                                )
+                            
+                            # Delete original
+                            await message.delete()
+                            
+                            # Cleanup
+                            os.remove(temp_file.name)
+                            os.remove(file_path)
+                            return
+                                
+                except Exception as e:
+                    print(f"Watermark error: {e}")
+                    # Fallback to normal caption edit
+                    await message.edit_caption(formatted)
+                    return
+
+        # If no watermark or processing failed
         await message.edit_caption(formatted)
+        
     except errors.FloodWait as e:
         await asyncio.sleep(e.value)
+    except Exception as e:
+        print(f"Caption error: {e}")
+        try:
+            await message.edit_caption(formatted)
+        except:
+            pass
         
 # ————
 # End of file
