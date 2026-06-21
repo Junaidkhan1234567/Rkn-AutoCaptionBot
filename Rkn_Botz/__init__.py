@@ -36,6 +36,7 @@ __maindeveloper__ = "<a href=https://t.me/Rkn_Bots_Updates>Rkn Developer</a>"
 │       ├── 📄 caption.py
 │       ├── 📄 database.py
 │       ├── 📄 Force_Sub.py
+│       ├── 📄 watermark.py  # ✅ New file
 │       └── 📄 web_support.py
 │
 ├── 📄 Documentation/
@@ -52,6 +53,12 @@ __maindeveloper__ = "<a href=https://t.me/Rkn_Bots_Updates>Rkn Developer</a>"
 │   ├── 📜 LICENSE
 │   └── 🚀 Procfile
 """
+
+# ✅ Import all modules
+from . import caption
+from . import Force_Sub
+from . import web_support
+from . import watermark  # ✅ Added watermark
 
 # ————
 # End of file
