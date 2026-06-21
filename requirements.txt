@@ -2,4 +2,3 @@ pyrofork
 tgcrypto
 motor
 aiohttp
-Pillow==10.2.0
