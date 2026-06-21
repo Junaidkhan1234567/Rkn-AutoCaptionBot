@@ -16,7 +16,12 @@ from pyrogram import Client, filters, errors, types
 from config import Rkn_Botz
 from .database import rkn_botz
 import asyncio, time, re, os, sys, tempfile
-from .watermark import add_watermark_to_image
+
+# ✅ Try to import watermark, but if not available, skip
+try:
+    from .watermark import add_watermark_to_image
+except ImportError:
+    add_watermark_to_image = None
 
 @Client.on_message(filters.private & filters.user(Rkn_Botz.ADMIN) & filters.command("rknusers"))
 async def show_user_stats(client, message):
@@ -169,27 +174,38 @@ def convert_size(size):
         n += 1
     return str(round(size, 2)) + " " + Dic_powerN[n] + 'ʙ'
 
-# ✅ MAIN AUTO CAPTION FUNCTION - FIXED
+# ======================================================
+# ✅✅✅ MAIN AUTO CAPTION - COMPLETELY FIXED ✅✅✅
+# ======================================================
+
 @Client.on_message(filters.channel)
 async def auto_caption(client, message):
     if not message.media:
         return
 
-    # Get file info
-    for mtype in ("video", "audio", "document", "voice"):
-        media = getattr(message, mtype, None)
-        if media and hasattr(media, "file_name"):
-            file_name = re.sub(r"@\w+", "", media.file_name or "").replace("_", " ").replace(".", " ").strip()
-            file_size = getattr(media, "file_size", None)
-            break
-    else:
-        return
-
-    channel_id = message.chat.id
-    cap_data = await rkn_botz._channels_collection.find_one({"channelId": channel_id})
-    original_caption = message.caption or file_name
-
     try:
+        # Get file info
+        file_name = None
+        file_size = None
+        
+        for mtype in ("video", "audio", "document", "voice"):
+            media = getattr(message, mtype, None)
+            if media:
+                file_name = getattr(media, "file_name", None)
+                file_size = getattr(media, "file_size", None)
+                if file_name:
+                    break
+        
+        if not file_name:
+            return
+        
+        # Clean filename
+        file_name = re.sub(r"@\w+", "", file_name or "").replace("_", " ").replace(".", " ").strip()
+        
+        channel_id = message.chat.id
+        cap_data = await rkn_botz._channels_collection.find_one({"channelId": channel_id})
+        original_caption = message.caption or file_name
+
         # Format caption
         if cap_data and cap_data.get("caption"):
             custom_caption = cap_data.get("caption", "")
@@ -215,69 +231,51 @@ async def auto_caption(client, message):
                 file_size=convert_size(file_size) if file_size else "Unknown"
             )
         
-        # ✅ CRITICAL FIX: Check if caption is already same
+        # ✅ CHECK #1: If caption is same, SKIP COMPLETELY
         if message.caption and message.caption == formatted:
             print("✅ Caption already same, skipping edit")
-            return  # Skip completely if same
+            return
         
-        # ✅ Check watermark
-        watermark_config = await rkn_botz.get_channel_watermark(channel_id)
-        
-        # Apply watermark for photos and videos
-        if watermark_config and watermark_config.get('text'):
-            if message.photo or (message.video and message.video.thumbs):
-                try:
-                    file_path = await client.download_media(message)
-                    if file_path:
-                        with open(file_path, 'rb') as f:
-                            file_data = f.read()
-                        watermarked_data = await add_watermark_to_image(file_data, watermark_config)
-                        if watermarked_data:
-                            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
-                            temp_file.write(watermarked_data)
-                            temp_file.close()
-                            if message.photo:
-                                await client.send_photo(
-                                    chat_id=message.chat.id,
-                                    photo=temp_file.name,
-                                    caption=formatted,
-                                    reply_to_message_id=message.id
-                                )
-                            elif message.video:
-                                await client.send_video(
-                                    chat_id=message.chat.id,
-                                    video=temp_file.name,
-                                    caption=formatted,
-                                    reply_to_message_id=message.id,
-                                    supports_streaming=True
-                                )
-                            await message.delete()
-                            os.remove(temp_file.name)
-                            os.remove(file_path)
-                            return
-                except Exception as e:
-                    print(f"Watermark error: {e}")
-                    # Fall through to normal edit
-
-        # ✅ Edit caption with error handling
+        # ✅ CHECK #2: Try to edit caption with full error handling
         try:
             await message.edit_caption(formatted)
             print("✅ Caption edited successfully")
+            return
         except errors.MessageNotModified:
-            print("ℹ️ Caption not modified, skipping")
-            pass
+            print("ℹ️ Message not modified (already same)")
+            return
         except errors.FloodWait as e:
-            print(f"⏳ Flood wait: {e.value} seconds")
-            await asyncio.sleep(e.value)
+            # ✅ FIX: Use e.value instead of e.x
+            wait_time = getattr(e, 'value', 30)
+            print(f"⏳ Flood wait {wait_time}s")
+            await asyncio.sleep(wait_time)
+            # Retry once after wait
+            try:
+                await message.edit_caption(formatted)
+            except:
+                pass
+            return
         except Exception as e:
             print(f"❌ Edit error: {e}")
+            return
             
-    except errors.FloodWait as e:
-        await asyncio.sleep(e.value)
     except Exception as e:
-        print(f"❌ Caption error: {e}")
+        print(f"❌ Main error: {e}")
+        # Don't raise exception, just log
+
+# ======================================================
+# ✅ END OF FIXED CAPTION.PY
+# ======================================================
 
 # ————
 # End of file
 # Original author: @RknDeveloperr
 # GitHub: https://github.com/RknDeveloper
+
+# Developer Contacts:
+# Telegram: @RknDeveloperr
+# Updates Channel: @Rkn_Bots_Updates & @Rkn_Botz
+# Special Thanks To: @ReshamOwner
+# Update Channels: @Digital_Botz & @DigitalBotz_Support
+
+# ⚠️ Please do not remove this credit!
