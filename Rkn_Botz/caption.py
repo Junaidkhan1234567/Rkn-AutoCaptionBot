@@ -77,9 +77,8 @@ async def broadcast(client, message):
                 f"• ⚠️ ᴜɴsᴜᴄᴄᴇssғᴜʟ: <code>{failed}</code>"
             )
         except Exception:
-            pass  # ignore edit failures during loop
+            pass
 
-    # Final status
     await rkn_status_msg.edit(
         f"<u><b>✅ ʙʀᴏᴀᴅᴄᴀsᴛ ᴄᴏᴍᴘʟᴇᴛᴇᴅ</b></u>\n\n"
         f"• 👥 ᴛᴏᴛᴀʟ ᴜsᴇʀs: <code>{total_users}</code>\n"
@@ -90,7 +89,6 @@ async def broadcast(client, message):
     )
 
         
-# Restart to cancell all process 
 @Client.on_message(filters.private & filters.user(Rkn_Botz.ADMIN) & filters.command("restart"))
 async def restart_bot(client, message):
     reply = await message.reply("🔄 Restarting bot...")
@@ -121,7 +119,6 @@ async def start_cmd(client, message):
         ])
     )
 
-# this command works on channels only 
 @Client.on_message(filters.command("set_caption") & filters.channel)
 async def set_caption(client, message):
     if len(message.command) < 2:
@@ -139,7 +136,6 @@ async def set_caption(client, message):
     await message.reply(f"✅ Caption set:\n\n<code>{caption}</code>")
 
 
-# this command works on channels only 
 @Client.on_message(filters.command(["delcaption", "del_caption", "delete_caption"]) & filters.channel)
 async def delete_caption(client, message):
     channel_id = message.chat.id
@@ -151,19 +147,13 @@ async def delete_caption(client, message):
 
 
 def detect_year(file_name):
-    # Step 1: Clean filename (replace symbols with space)
     clean_name = re.sub(r"[^\d]", " ", file_name)
-
-    # Step 2: Extract all 4-digit sequences
     candidates = re.findall(r"\b\d{4}\b", clean_name)
-
-    # Step 3: Return the first one that matches year range
     for year in candidates:
         year_int = int(year)
         if 1900 <= year_int <= 2099:
-            return year # results years
-            
-    return "Unknown" # not available 
+            return year
+    return "Unknown"
     
 def detect_season(file_name):
     match = re.search(r'\bS(\d{2})\b', file_name, re.IGNORECASE)
@@ -182,13 +172,12 @@ def detect_language(file_name):
     for lang in languages:
         if re.search(rf'\b{lang}\b', file_name, re.IGNORECASE):
             return lang.capitalize()
-            
     return "Unknown"
     
 
 def convert_size(size):    
     if not size:
-        return ""
+        return "Unknown"
     power = 2**10
     n = 0
     Dic_powerN = {0: ' ', 1: 'K', 2: 'M', 3: 'G', 4: 'T'}
@@ -202,6 +191,7 @@ async def auto_caption(client, message):
     if not message.media:
         return
 
+    # Get file info
     for mtype in ("video", "audio", "document", "voice"):
         media = getattr(message, mtype, None)
         if media and hasattr(media, "file_name"):
@@ -215,8 +205,9 @@ async def auto_caption(client, message):
     cap_data = await rkn_botz._channels_collection.find_one({"channelId": channel_id})
     original_caption = message.caption or file_name
 
+    # ✅ Check if caption already has watermark/caption to avoid duplication
     try:
-        if cap_data:
+        if cap_data and cap_data.get("caption"):
             custom_caption = cap_data.get("caption", "")
             formatted = custom_caption.format(
                 file_name=file_name,
@@ -240,63 +231,79 @@ async def auto_caption(client, message):
                 file_size=convert_size(file_size) if file_size else "Unknown"
             )
         
-        # ✅ Check for watermark
-        watermark_config = await rkn_botz.get_channel_watermark(channel_id)
-        
-        # ✅ Apply watermark for photos and videos
-        if watermark_config and watermark_config.get('text'):
-            if message.photo or (message.video and message.video.thumbs):
-                try:
-                    # Download media
-                    file_path = await client.download_media(message)
-                    
-                    if file_path:
-                        # Read file
-                        with open(file_path, 'rb') as f:
-                            file_data = f.read()
+        # ✅ Check if caption is already same (avoid MESSAGE_NOT_MODIFIED error)
+        if message.caption == formatted:
+            print("Caption already same, skipping edit")
+            # Still process watermark if needed
+        else:
+            # ✅ Check for watermark
+            watermark_config = await rkn_botz.get_channel_watermark(channel_id)
+            
+            # ✅ Apply watermark for photos and videos
+            if watermark_config and watermark_config.get('text'):
+                if message.photo or (message.video and message.video.thumbs):
+                    try:
+                        # Download media
+                        file_path = await client.download_media(message)
                         
-                        # Add watermark
-                        watermarked_data = await add_watermark_to_image(file_data, watermark_config)
-                        
-                        if watermarked_data:
-                            # Save watermarked file
-                            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
-                            temp_file.write(watermarked_data)
-                            temp_file.close()
+                        if file_path:
+                            # Read file
+                            with open(file_path, 'rb') as f:
+                                file_data = f.read()
                             
-                            # Send watermarked file
-                            if message.photo:
-                                await client.send_photo(
-                                    chat_id=message.chat.id,
-                                    photo=temp_file.name,
-                                    caption=formatted,
-                                    reply_to_message_id=message.id
-                                )
-                            elif message.video:
-                                await client.send_video(
-                                    chat_id=message.chat.id,
-                                    video=temp_file.name,
-                                    caption=formatted,
-                                    reply_to_message_id=message.id,
-                                    supports_streaming=True
-                                )
+                            # Add watermark
+                            watermarked_data = await add_watermark_to_image(file_data, watermark_config)
                             
-                            # Delete original
-                            await message.delete()
-                            
-                            # Cleanup
-                            os.remove(temp_file.name)
-                            os.remove(file_path)
-                            return
+                            if watermarked_data:
+                                # Save watermarked file
+                                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+                                temp_file.write(watermarked_data)
+                                temp_file.close()
                                 
-                except Exception as e:
-                    print(f"Watermark error: {e}")
-                    # Fallback to normal caption edit
-                    await message.edit_caption(formatted)
-                    return
+                                # Send watermarked file
+                                if message.photo:
+                                    await client.send_photo(
+                                        chat_id=message.chat.id,
+                                        photo=temp_file.name,
+                                        caption=formatted,
+                                        reply_to_message_id=message.id
+                                    )
+                                elif message.video:
+                                    await client.send_video(
+                                        chat_id=message.chat.id,
+                                        video=temp_file.name,
+                                        caption=formatted,
+                                        reply_to_message_id=message.id,
+                                        supports_streaming=True
+                                    )
+                                
+                                # Delete original
+                                await message.delete()
+                                
+                                # Cleanup
+                                os.remove(temp_file.name)
+                                os.remove(file_path)
+                                return
+                                    
+                    except Exception as e:
+                        print(f"Watermark error: {e}")
+                        # Fallback to normal caption edit
+                        try:
+                            await message.edit_caption(formatted)
+                        except errors.MessageNotModified:
+                            pass
+                        return
 
-        # If no watermark or processing failed
-        await message.edit_caption(formatted)
+            # ✅ Normal caption edit with error handling
+            try:
+                await message.edit_caption(formatted)
+            except errors.MessageNotModified:
+                # Caption already same, ignore
+                pass
+            except errors.FloodWait as e:
+                await asyncio.sleep(e.value)
+            except Exception as e:
+                print(f"Caption edit error: {e}")
         
     except errors.FloodWait as e:
         await asyncio.sleep(e.value)
@@ -304,6 +311,8 @@ async def auto_caption(client, message):
         print(f"Caption error: {e}")
         try:
             await message.edit_caption(formatted)
+        except errors.MessageNotModified:
+            pass
         except:
             pass
         
